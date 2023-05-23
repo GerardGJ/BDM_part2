@@ -57,7 +57,7 @@ def formatted_idealista(lookup):
                 val=j.get('neighborhood',None)
                 if val is not None:
                     if (val in list(k.values()) or str.lower(val) in list(k.values())):
-                        if j['propertyCode'] not in duplicates:
+                        if (j['propertyCode'].__str__()+i['filename'][(i['filename'].find('_')+1):(i['filename'].find('_')+11)]) not in duplicates:
                             j['id'] = j['propertyCode']
                             del j['propertyCode']
 
@@ -67,7 +67,7 @@ def formatted_idealista(lookup):
                             j['neighborhood'] = k['neighborhood']
                             j['district_id'] = k['district_id']
                             j['neighborhood_id'] = k['district_id']
-
+                            j['timestamp']=i['filename'][(i['filename'].find('_')+1):(i['filename'].find('_')+11)]
                             try:
                                 for kk in j['parkingSpace'].keys():
                                     j[kk]=j['parkingSpace'][kk]
@@ -88,7 +88,7 @@ def formatted_idealista(lookup):
                                 pass
 
                             data.append(j)
-                            duplicates.append(j['id'])
+                            duplicates.append(j['id'].__str__()+i['filename'][(i['filename'].find('_')+1):(i['filename'].find('_')+11)])
                             break
                         else:
                             dup += 1
@@ -100,7 +100,7 @@ def format_bcn_markets(lookup):
     dup=0
     for i in persistent_zone['bcn-markets'].find():
         for j in i['data']:
-            if j['register_id'] not in duplicates:
+            if j['register_id'].__str__()+j['created'].__str__()[0:4] not in duplicates:
 
                 if len(j['addresses'])>0:
                     for k in j['addresses'][0].keys():
@@ -109,7 +109,6 @@ def format_bcn_markets(lookup):
                 if len(j['classifications_data'])>0:
                     for k in j['classifications_data'][0].keys():
                         j[k]=j['classifications_data'][0][k]
-
 
                 j['n_warnings']=len(j['warnings'])
                 j['x_coord'] = j['geo_epgs_25831']['x']
@@ -137,7 +136,7 @@ def format_bcn_markets(lookup):
                 del j['from_relationships']
                 del j['to_relationships']
                 del j['timetable']
-                duplicates.append(j['register_id'])
+                duplicates.append(j['register_id'].__str__()+j['created'].__str__()[0:4])
                 data.append(j)
             else:
                 dup += 1
@@ -288,8 +287,22 @@ table_markets=list(formated_zone['table_markets'].find({}))
 
 ## APLICAR AQUI SPARK (sd, mean, etc)
 
+from pyspark.sql.functions import col, create_map, lit
 
+sc = pyspark.SparkContext.getOrCreate()
+sqlContext = SQLContext(sc)
 
+dm=sc.parallelize(table_markets,numSlices=10)
+dm=dm.map(lambda x: (x['neighborhood_id'],1))
+dm=dm.reduceByKey(lambda x,y: x+y)
+dm=dm.persist()
+
+project=['index_rfd', 'population']
+di=sc.parallelize(table_income,numSlices=10)
+di=di.map(lambda x: (x['neighborhood_id'],[float(x[k]) for k in project]+[1]))
+di=di.reduceByKey(lambda x,y: list(map(sum,zip(x,y))))
+di=di.mapValues(lambda x: [x[0]/x[-1],x[1]])
+di.persist()
 
 ## CREAR Y SUBIR TABLAS
 
@@ -304,6 +317,7 @@ CREATE TABLE IF NOT EXISTS idealista (
     numPhotos INTEGER, 
     floor INTEGER, 
     price REAL,
+    timestamp TEXT
     propertyType TEXT, 
     operation TEXT, 
     size REAL,
