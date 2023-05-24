@@ -364,6 +364,11 @@ def UploadFormattedZone():
     hdfs_client.upload('./FormattedZone/table_markets.parquet', os.path.join('./FormattedZone/table_markets.parquet'), overwrite=True)
     hdfs_client.upload('./FormattedZone/table_income.parquet', os.path.join('./FormattedZone/table_income.parquet'), overwrite=True)
     hdfs_client.upload('./FormattedZone/table_idealista.parquet', os.path.join('./FormattedZone/table_idealista.parquet'), overwrite=True)
+    
+    os.remove('./FormattedZone/table_markets.parquet')
+    os.remove('./FormattedZone/table_income.parquet')
+    os.remove('./FormattedZone/table_idealista.parquet')
+    
 def UploadExploitationZone():
     # table_idealista = list(formated_zone['table_idealista'].find({}))
     # table_income = list(formated_zone['table_income'].find({}))
