@@ -12,6 +12,7 @@ import pyspark
 import sys
 import findspark
 from pyspark import SparkConf, SparkContext
+import builtins as p
 from pyspark.sql import SQLContext, SparkSession
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
@@ -250,7 +251,7 @@ def spark_sql_init():
     return sqlcontext,sc
 
 def spark_mongo_init():
-    os.environ["SPARK_HOME"] = "C:/Users/Keyser/PycharmProjects/pythonProject/venv/Lib/site-packages/pyspark"
+    os.environ["SPARK_HOME"] = r"C:\Users\Gerard\Desktop\Master\S2\BDM\Part2\pythonProject"
     findspark.init()
 
     config = {
@@ -287,7 +288,7 @@ def spark_data_model(table_markets, table_income,table_idealista):
     project_income = ['index_rfd', 'population']
     di = sqlcontext.read.parquet(f'hdfs://pidgey.fib.upc.es:27000/user/bdm/FormattedZone/{table_income}.parquet').rdd \
         .map(lambda x: (x['neighborhood_id'], [float(x[k]) for k in project_income] + [1])) \
-        .reduceByKey(lambda x, y: list(map(sum, zip(x, y)))) \
+        .reduceByKey(lambda x, y: list(map(p.sum, zip(x, y)))) \
         .mapValues(lambda x: [y / x[-1] for y in x[:-1]]) \
         .sortBy(lambda x: x[1][0])\
         .zipWithIndex()
@@ -298,7 +299,7 @@ def spark_data_model(table_markets, table_income,table_idealista):
     project_idealista = ['price', 'size', 'rooms', 'bathrooms', 'priceByArea']
     did = sqlcontext.read.parquet(f'hdfs://pidgey.fib.upc.es:27000/user/bdm/FormattedZone/{table_idealista}.parquet').rdd \
         .map(lambda x: (x['neighborhood_id'], [float(x[k]) for k in project_idealista] + [1])) \
-        .reduceByKey(lambda x, y: list(map(sum, zip(x, y)))) \
+        .reduceByKey(lambda x, y: list(map(p.sum, zip(x, y)))) \
         .mapValues(lambda x: [y / x[-1] for y in x[:-1]]) \
         .persist(pyspark.StorageLevel.MEMORY_AND_DISK)
 
@@ -344,33 +345,39 @@ def spark_train_model():
     return model
 
 def UploadFormattedZone():
-    [lookupIdealista, lookupOpenBCN] = get_lookup(Lookup)
-    table_markets = format_bcn_markets(lookupOpenBCN)
-    table_income = format_bcn_income(lookupOpenBCN)
-    table_idealista = formatted_idealista(lookupIdealista)
+    print("Uploading data to Formatted Zone")
+    try:
+        [lookupIdealista, lookupOpenBCN] = get_lookup(Lookup)
+        table_markets = format_bcn_markets(lookupOpenBCN)
+        table_income = format_bcn_income(lookupOpenBCN)
+        table_idealista = formatted_idealista(lookupIdealista)
 
-    # Subir a MONGO
-    #
-    # formated_zone['table_idealista'].insert_many(table_idealista)
-    # formated_zone['table_income'].insert_many(table_income)
-    # formated_zone['table_markets'].insert_many(table_markets)
+        # Subir a MONGO
+        #
+        # formated_zone['table_idealista'].insert_many(table_idealista)
+        # formated_zone['table_income'].insert_many(table_income)
+        # formated_zone['table_markets'].insert_many(table_markets)
 
-    # Subir a HDFS en Parquet
-    table_markets = pa.Table.from_pandas(pd.DataFrame.from_dict(table_markets))
-    table_income = pa.Table.from_pandas(pd.DataFrame.from_dict(table_income))
-    table_idealista = pa.Table.from_pandas(pd.DataFrame.from_dict(table_idealista))
+        # Subir a HDFS en Parquet
+        table_markets = pa.Table.from_pandas(pd.DataFrame.from_dict(table_markets))
+        table_income = pa.Table.from_pandas(pd.DataFrame.from_dict(table_income))
+        table_idealista = pa.Table.from_pandas(pd.DataFrame.from_dict(table_idealista))
 
-    pq.write_table(table_markets, './FormattedZone/table_markets.parquet')
-    pq.write_table(table_income, './FormattedZone/table_income.parquet')
-    pq.write_table(table_idealista, './FormattedZone/table_idealista.parquet')
+        pq.write_table(table_markets, './FormattedZone/table_markets.parquet')
+        pq.write_table(table_income, './FormattedZone/table_income.parquet')
+        pq.write_table(table_idealista, './FormattedZone/table_idealista.parquet')
 
-    hdfs_client.upload('./FormattedZone/table_markets.parquet', os.path.join('./FormattedZone/table_markets.parquet'), overwrite=True)
-    hdfs_client.upload('./FormattedZone/table_income.parquet', os.path.join('./FormattedZone/table_income.parquet'), overwrite=True)
-    hdfs_client.upload('./FormattedZone/table_idealista.parquet', os.path.join('./FormattedZone/table_idealista.parquet'), overwrite=True)
-    
-    os.remove('./FormattedZone/table_markets.parquet')
-    os.remove('./FormattedZone/table_income.parquet')
-    os.remove('./FormattedZone/table_idealista.parquet')
+        hdfs_client.upload('./FormattedZone/table_markets.parquet', os.path.join('./FormattedZone/table_markets.parquet'), overwrite=True)
+        hdfs_client.upload('./FormattedZone/table_income.parquet', os.path.join('./FormattedZone/table_income.parquet'), overwrite=True)
+        hdfs_client.upload('./FormattedZone/table_idealista.parquet', os.path.join('./FormattedZone/table_idealista.parquet'), overwrite=True)
+
+        print("Data succesfully uploaded to Formatted Zone")
+
+        os.remove('./FormattedZone/table_markets.parquet')
+        os.remove('./FormattedZone/table_income.parquet')
+        os.remove('./FormattedZone/table_idealista.parquet')
+    except:
+        print("Error when uploading to Formatted Zone")
 
 def spark_data_dashboard(table_markets,table_income,table_idealista):
     
@@ -410,48 +417,56 @@ def UploadExploitationZone():
     # table_idealista = list(formated_zone['table_idealista'].find({}))
     # table_income = list(formated_zone['table_income'].find({}))
     # table_markets = list(formated_zone['table_markets'].find({}))
-    print('start')
-    data_model = spark_data_model('table_markets', 'table_income', 'table_idealista')
-    print('model')
-    data_dashboard = spark_data_dashboard('table_markets', 'table_income', 'table_idealista')
-    ## CREAR Y SUBIR TABLAS
+    print("Uploading data Exploitation Zone")
+    try:
+        print('Model Start')
+        data_model = spark_data_model('table_markets', 'table_income', 'table_idealista')
+        print('Model Uploaded')
+        print('Dashboard Start')
+        data_dashboard = spark_data_dashboard('table_markets', 'table_income', 'table_idealista')
+        print('Dashboard Uploaded')
+        ## CREAR Y SUBIR TABLAS
 
-    formatted_path = './ExploitationZone'
-    connection = create_connection(formatted_path)
+        formatted_path = './ExploitationZone'
+        connection = create_connection(formatted_path)
 
-    create_data_model = """
-    CREATE TABLE IF NOT EXISTS model_data (
-        neighborhood_id TEXT PRIMARY KEY NOT NULL,
-        n_markets INTEGER, 
-        price REAL, 
-        size REAL, 
-        rooms REAL, 
-        bathrooms REAL,
-        priceByArea REAL, 
-        index_rfd TEXT, 
-        population REAL
-    );
-    """
-    execute_query(connection, create_data_model)
+        create_data_model = """
+        CREATE TABLE IF NOT EXISTS model_data (
+            neighborhood_id TEXT PRIMARY KEY NOT NULL,
+            n_markets INTEGER, 
+            price REAL, 
+            size REAL, 
+            rooms REAL, 
+            bathrooms REAL,
+            priceByArea REAL, 
+            index_rfd TEXT, 
+            population REAL
+        );
+        """
+        execute_query(connection, create_data_model)
 
-    err = 0
-    for x in data_model:
-        columns = ', '.join(x.keys())
-        placeholders = ':' + ', :'.join(x.keys())
-        query = 'INSERT OR REPLACE INTO model_data (%s) VALUES (%s)' % (columns, placeholders)
-        connection.execute(query, x)
-        connection.commit()
-        try:
+        err = 0
+        for x in data_model:
+            columns = ', '.join(x.keys())
+            placeholders = ':' + ', :'.join(x.keys())
+            query = 'INSERT OR REPLACE INTO model_data (%s) VALUES (%s)' % (columns, placeholders)
             connection.execute(query, x)
             connection.commit()
+            try:
+                connection.execute(query, x)
+                connection.commit()
 
-        except Error as e:
-            err += 1
-    print(f'Number of failed inserts {err}')
+            except Error as e:
+                err += 1
+        print(f'Number of failed inserts {err}')
 
-    data_dashboard[0].toPandas().to_sql(con=connection,name='mvidealista',if_exists='append',index=['neighborhood_id,year'])
-    data_dashboard[1].toPandas().to_sql(con=connection,name='mvmarkets',if_exists='append',index=['neighborhood_id_ind'])
-    data_dashboard[2].toPandas().to_sql(con=connection,name='mvincome',if_exists='append',index=['neighborhood_id_ind'])
+        data_dashboard[0].toPandas().to_sql(con=connection,name='mvidealista',if_exists='replace')
+        data_dashboard[1].toPandas().to_sql(con=connection,name='mvmarkets',if_exists='replace')
+        data_dashboard[2].toPandas().to_sql(con=connection,name='mvincome',if_exists='replace')
+
+        print("Data uploaded to Exploitation Zone")
+    except:
+        print("Error when uploading to Exploitation Zone")
 
 #os.environ["SPARK_HOME"] = "C:/Users/Keyser/PycharmProjects/pythonProject/venv/Lib/site-packages/pyspark"
 findspark.init()
